@@ -197,6 +197,9 @@ async def send_response(
             headers=headers,
             json=json_data,
         )
+    
+    print(f"Response: {response.status_code} - {response.text}")
+    print(f"Headers: {dict(response.headers)}")
 
     return response.status_code == 200
 
