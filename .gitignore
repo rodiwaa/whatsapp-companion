@@ -4,6 +4,9 @@
 ### response same files
 .response*
 
+### personal data
+.personal/
+
 ### macOS ###
 # General
 .DS_Store
