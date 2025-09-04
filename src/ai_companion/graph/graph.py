@@ -42,10 +42,10 @@ def create_workflow_graph():
 
     # Then inject both context and memories
     graph_builder.add_edge("router_node", "conversation_node")
-    graph_builder.add_edge("context_injection_node", "memory_injection_node")
+    # graph_builder.add_edge("conversation_node", "memory_injection_node")
 
     # Then proceed to appropriate response node
-    graph_builder.add_conditional_edges("memory_injection_node", select_workflow)
+    # graph_builder.add_conditional_edges("memory_injection_node", select_workflow)
 
     # Check for summarization after any response
     graph_builder.add_conditional_edges("conversation_node", should_summarize_conversation)

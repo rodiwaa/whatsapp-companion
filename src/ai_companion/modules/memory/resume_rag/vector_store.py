@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 from typing import List, Optional
+from fastapi import APIRouter, UploadFile, HTTPException
 
 from ai_companion.settings import settings
 from qdrant_client import QdrantClient
@@ -103,28 +104,37 @@ class ResumeRagVectorStore:
       if not chunks:
         return
 
-      points = []
-      for i, chunk in enumerate(chunks):
-          embedding = self.model.encode(chunk).tolist()
-          point = PointStruct(
-              id=self._generate_point_id(filename, i),  # Use UUID instead of string
-              vector=embedding,
-              payload={
-                  "filename": filename,
-                  "chunk_index": i,
-                  "text": chunk,
-                  "timestamp": datetime.now().isoformat(),
-              },
-          )
-          points.append(point)
+      try:
+        points = []
+        for i, chunk in enumerate(chunks):
+            logger.debug(f"Processing chunk {i} with length {len(chunk)}")
+            embedding = self.model.encode(chunk).tolist()
+            point_id = self._generate_point_id(filename, i)
+            logger.debug(f"Generated point ID: {point_id}")
+            point = PointStruct(
+                id=self._generate_point_id(filename, i),  # Use UUID instead of string
+                vector=embedding,
+                payload={
+                    "filename": filename,
+                    "chunk_index": i,
+                    "text": chunk,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
+            points.append(point)
 
-      self.client.upsert(
-          collection_name=self.COLLECTION_NAME,
-          points=points,
-          wait=True,
-      )
+        logger.info(f"Attempting to upsert {len(points)} points to collection '{self.COLLECTION_NAME}'")
 
-      logger.info(f"Upserted {len(points)} chunks from '{filename}' to '{self.COLLECTION_NAME}' collection.")
+        self.client.upsert(
+            collection_name=self.COLLECTION_NAME,
+            points=points,
+            wait=True,
+        )
+
+        logger.info(f"Upserted {len(points)} chunks from '{filename}' to '{self.COLLECTION_NAME}' collection.")
+      except Exception as e:
+        logger.error(f"Error in store_chunks: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process PDFs: {e}")
 
 
     def search_documents(self, query: str, k: int = 5) -> List[DocumentChunk]:

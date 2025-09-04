@@ -129,22 +129,23 @@ async def process_pdfs():
             chunks = await chunk_text(pdf_text)
             
             # 3. Store chunks in Qdrant with proper point IDs
-            chunks_with_ids = []
-            for i, chunk in enumerate(chunks):
-                point_id = generate_point_id(pdf_filename, i)
-                chunks_with_ids.append({
-                    "id": point_id,
-                    "text": chunk,
-                    "metadata": {
-                        "filename": pdf_filename,
-                        "chunk_index": i
-                    }
-                })
+            # chunks_with_ids = []
+            # for i, chunk in enumerate(chunks):
+            #     point_id = generate_point_id(pdf_filename, i)
+            #     chunks_with_ids.append({
+            #         "id": point_id,
+            #         "text": chunk,
+            #         "metadata": {
+            #             "filename": pdf_filename,
+            #             "chunk_index": i
+            #         }
+            #     })
             
             # Store chunks with proper IDs
             print(f"store_chunks 123")
             logger.debug("store_chunks")
-            # resume_rag_vector_store.store_chunks(chunks_with_ids)
+            # resume_rag_vector_store.store_chunks(chunks_with_ids, pdf_filename)
+            resume_rag_vector_store.store_chunks(chunks, pdf_filename)
             
             add_embedded_pdf(pdf_filename)
             processed_count += 1
