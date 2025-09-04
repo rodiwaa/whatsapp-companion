@@ -1,5 +1,8 @@
 import os
 import logging
+import uuid
+import hashlib
+
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
@@ -82,38 +85,46 @@ class ResumeRagVectorStore:
             )
             logger.info(f"Qdrant collection '{self.COLLECTION_NAME}' created.")
 
+    def _generate_point_id(self, filename: str, chunk_index: int) -> str:
+      """Generate a valid UUID point ID for Qdrant."""
+      print("_generate_point_id")
+      combined_string = f"{filename}_{chunk_index}"
+      hash_object = hashlib.md5(combined_string.encode())
+      return str(uuid.UUID(hash_object.hexdigest()))
+
 
     def store_chunks(self, chunks: List[str], filename: str) -> None:
-        """Store document chunks in the vector store.
+      """Store document chunks in the vector store.
+      
+      Args:
+          chunks: A list of text chunks from a document.
+          filename: The name of the original PDF file.
+      """
+      if not chunks:
+        return
 
-        Args:
-            chunks: A list of text chunks from a document.
-            filename: The name of the original PDF file.
-        """
-        if not chunks:
-            return
+      points = []
+      for i, chunk in enumerate(chunks):
+          embedding = self.model.encode(chunk).tolist()
+          point = PointStruct(
+              id=self._generate_point_id(filename, i),  # Use UUID instead of string
+              vector=embedding,
+              payload={
+                  "filename": filename,
+                  "chunk_index": i,
+                  "text": chunk,
+                  "timestamp": datetime.now().isoformat(),
+              },
+          )
+          points.append(point)
 
-        points = []
-        for i, chunk in enumerate(chunks):
-            embedding = self.model.encode(chunk).tolist()
-            point = PointStruct(
-                id=f"{filename}_{i}",  # Unique ID for each chunk
-                vector=embedding,
-                payload={
-                    "filename": filename,
-                    "chunk_index": i,
-                    "text": chunk,
-                    "timestamp": datetime.now().isoformat(),  # Add timestamp for tracking
-                },
-            )
-            points.append(point)
+      self.client.upsert(
+          collection_name=self.COLLECTION_NAME,
+          points=points,
+          wait=True,
+      )
 
-        self.client.upsert(
-            collection_name=self.COLLECTION_NAME,
-            points=points,
-            wait=True,
-        )
-        logger.info(f"Upserted {len(points)} chunks from '{filename}' to '{self.COLLECTION_NAME}' collection.")
+      logger.info(f"Upserted {len(points)} chunks from '{filename}' to '{self.COLLECTION_NAME}' collection.")
 
 
     def search_documents(self, query: str, k: int = 5) -> List[DocumentChunk]:
