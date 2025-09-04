@@ -1,4 +1,5 @@
 from io import BytesIO
+import uuid
 
 import chainlit as cl
 from langchain_core.messages import AIMessageChunk, HumanMessage
@@ -19,7 +20,7 @@ image_to_text = ImageToText()
 async def on_chat_start():
     """Initialize the chat session"""
     # thread_id = cl.user_session.get("id")
-    cl.user_session.set("thread_id", 1)
+    cl.user_session.set("thread_id", uuid.uuid4())
 
 
 @cl.on_message
