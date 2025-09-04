@@ -4,6 +4,8 @@ import uuid
 import chainlit as cl
 from langchain_core.messages import AIMessageChunk, HumanMessage
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langsmith import Client
+from langchain.callbacks.tracers import LangChainTracer
 
 from ai_companion.graph import graph_builder
 from ai_companion.modules.image import ImageToText
@@ -15,12 +17,20 @@ speech_to_text = SpeechToText()
 text_to_speech = TextToSpeech()
 image_to_text = ImageToText()
 
+langsmith_client = Client()
 
 @cl.on_chat_start
 async def on_chat_start():
     """Initialize the chat session"""
-    # thread_id = cl.user_session.get("id")
+    thread_id = str(uuid.uuid4())
     cl.user_session.set("thread_id", uuid.uuid4())
+
+    # Store thread metadata for LangSmith
+    cl.user_session.set("langsmith_metadata", {
+        "session_id": thread_id,  # This creates the thread in LangSmith
+        "user_id": cl.user_session.get("id", "anonymous"),
+        "platform": "chainlit"
+    })
 
 
 @cl.on_message
@@ -50,13 +60,22 @@ async def on_message(message: cl.Message):
 
     # Process through graph with enriched message content
     thread_id = cl.user_session.get("thread_id")
+    metadata = cl.user_session.get("langsmith_metadata")
 
     async with cl.Step(type="run"):
         async with AsyncSqliteSaver.from_conn_string(settings.SHORT_TERM_MEMORY_DB_PATH) as short_term_memory:
             graph = graph_builder.compile(checkpointer=short_term_memory)
+            
+            # Add LangSmith tracer with thread metadata
+            tracer = LangChainTracer(client=langsmith_client)
+            
             async for chunk in graph.astream(
                 {"messages": [HumanMessage(content=content)]},
-                {"configurable": {"thread_id": thread_id}},
+                {
+                    "configurable": {"thread_id": thread_id},
+                    "callbacks": [tracer],
+                    "metadata": metadata
+                },
                 stream_mode="messages",
             ):
                 if chunk[1]["langgraph_node"] == "conversation_node" and isinstance(chunk[0], AIMessageChunk):
@@ -109,12 +128,21 @@ async def on_audio_end(elements):
     transcription = await speech_to_text.transcribe(audio_data)
 
     thread_id = cl.user_session.get("thread_id")
+    metadata = cl.user_session.get("langsmith_metadata")
 
     async with AsyncSqliteSaver.from_conn_string(settings.SHORT_TERM_MEMORY_DB_PATH) as short_term_memory:
         graph = graph_builder.compile(checkpointer=short_term_memory)
+        
+        # Add LangSmith tracer with thread metadata
+        tracer = LangChainTracer(client=langsmith_client)
+
         output_state = await graph.ainvoke(
             {"messages": [HumanMessage(content=transcription)]},
-            {"configurable": {"thread_id": thread_id}},
+            {
+                "configurable": {"thread_id": thread_id},
+                "metadata": metadata,  # Add thread metadata for LangSmith
+                "callbacks": [tracer]  # Add LangSmith tracer
+            }
         )
 
     # Use global TextToSpeech instance
