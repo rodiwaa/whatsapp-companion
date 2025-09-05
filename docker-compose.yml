@@ -5,6 +5,7 @@ services:
       - "6333:6333"
     volumes:
       - ./long_term_memory:/qdrant/storage
+      - ./resume-rag:/qdrant/storage
     restart: unless-stopped
   chainlit:
     build:
